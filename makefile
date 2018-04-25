@@ -14,13 +14,13 @@ all: rec play
 
 ###### Record
 rec: rec.o 
-	$(CXX) -o rec rec.o
+	$(CXX)  $(LDLIBS) -o rec rec.o
 rec.o: rec.c
 	$(CXX) -c $(LDLIBS) rec.c
 
 ###### Play
 play: play.o
-	$(CXX) -o play play.o
+	$(CXX) $(LDLIBS) -o play play.o
 play.o: play.c
 	$(CXX) -c $(LDLIBS) play.c
 
