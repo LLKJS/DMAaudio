@@ -28,6 +28,7 @@ static snd_pcm_format_t format = SND_PCM_FORMAT_S16;    /* sample format */
 static unsigned int rate = 16000;                       /* stream rate */
 static unsigned int channels = 1;                       /* count of channels */
 snd_pcm_uframes_t frames;
+static snd_pcm_sframes_t period_size;
 int frame_size,size;
 
 
@@ -60,8 +61,10 @@ int main(int argc, char *argv[])
 			break;
 		case 'm':
 			sscanf(optarg, "%i", &mode);
+			break;
 		case 'h':
 			print_help();
+			break;
 		default:
 			break;
 		}
@@ -102,7 +105,11 @@ int main(int argc, char *argv[])
 	}
 
 	/* Use a buffer large enough to hold one period */
-	snd_pcm_hw_params_get_period_size(hwparams, &frames, &dir);
+	err = snd_pcm_hw_params_get_period_size(hwparams, &frames, &dir);
+	if (err < 0) {
+		fprintf(stderr,"Unable to get period size for capture: %s\n", snd_strerror(err));
+	}
+	period_size = frames;
 
 	buffer = (char *) malloc(size);
 	fprintf(stderr, "frames %d\n", frames);
@@ -121,7 +128,7 @@ int main(int argc, char *argv[])
 		read_mmap_normal(handle, buffer, frames);
 		break;
 	case MMAP:
-		read_mmap();
+		read_mmap(handle, buffer, frames);
 		break;
 	}
 
@@ -256,9 +263,73 @@ void read_mmap_normal(snd_pcm_t *handle, void *buffer, snd_pcm_uframes_t frames)
 	}
 }
 
-void read_mmap()
+void read_mmap(snd_pcm_t *handle, void *buffer, snd_pcm_uframes_t frames)
 {
+	int err;
+	snd_pcm_sframes_t avail, commitres;
+	int first_run = 1;
+	const snd_pcm_channel_area_t *my_areas;
+	snd_pcm_uframes_t offset;
 
+	while (1)
+	{
+		avail = snd_pcm_avail_update(handle); //check available frames
+		if(avail<0)//error
+		{
+			fprintf(stderr, "error occurred in avail_update: %s\n",snd_strerror(err));
+			first_run = 1;
+			continue;
+		}
+		if(avail<period_size)//still waiting
+		{
+			if(first_run)
+			{
+				first_run = 0;
+				err = snd_pcm_start(handle);
+				if (err < 0)
+				{
+					fprintf(stderr,"Start error: %s\n", snd_strerror(err));
+					exit(EXIT_FAILURE);
+				}
+			}
+			else
+			{
+				err = snd_pcm_wait(handle, -1);
+				if (err < 0)
+				{
+					fprintf(stderr,"snd_pcm_wait error: %s\n", snd_strerror(err));
+					exit(EXIT_FAILURE);
+				}
+				first_run=1;
+			}
+			continue;
+		}
+		size = period_size;
+		while(size > 0)
+		{
+			frames = period_size;
+			err = snd_pcm_mmap_begin(handle, &my_areas, &offset, &frames);
+			if (err < 0)
+			{
+				printf("MMAP begin avail error: %s\n", snd_strerror(err));
+				exit(EXIT_FAILURE);
+				first_run = 1;
+			}
+			err = write(1, buffer, size); //TODO
+			if (err != size)
+			{
+				fprintf(stderr, "short write: wrote %d bytes\n", err);
+			}
+			commitres = snd_pcm_mmap_commit(handle, offset, frames);
+			if (commitres < 0 || (snd_pcm_uframes_t)commitres != frames)
+			{
+				printf("MMAP commit error: %s\n", snd_strerror(err));
+				exit(EXIT_FAILURE);
+				first_run = 1;
+			}
+			size -= frames;
+		}
+	}
 }
 
 void print_help()

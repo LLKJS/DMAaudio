@@ -16,6 +16,6 @@ int set_hwparams(snd_pcm_t *handle, snd_pcm_hw_params_t *params, snd_pcm_access_
 int set_swparams(snd_pcm_t *handle, snd_pcm_sw_params_t *swparams);
 void read_normal(snd_pcm_t *handle, void *buffer, snd_pcm_uframes_t frames);
 void read_mmap_normal(snd_pcm_t *handle, void *buffer, snd_pcm_uframes_t frames);
-void read_mmap();
+void read_mmap(snd_pcm_t *handle, void *buffer, snd_pcm_uframes_t frames);
 
 #endif
