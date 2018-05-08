@@ -10,7 +10,7 @@ LDLIBS += $(LDLIBS_ASOUND)
 ##################
 .PHONY: all clean
 
-all: rec play dma
+all: rec play audio_dma
 
 ###### Record
 rec: rec.o 

@@ -127,19 +127,65 @@ int set_swparams(snd_pcm_t *pcm, snd_pcm_sw_params_t *params)
  * SND_PCM_ACCESS_MMAP_NONINTERLEAVED
  */
 snd_pcm_sframes_t dma_read(snd_pcm_t *pcm, void **bufs, snd_pcm_uframes_t size)
-{	/*
+{
+	snd_pcm_state_t state;
+	snd_pcm_sframes_t avail;
+	snd_pcm_uframes_t offset = 0;
+	int err;
 	// create areas (one per channel)
 	snd_pcm_channel_area_t areas[channels];
 	// set these areas to be where the buffer is
 	// all further operations are handled with these areas
-	snd_pcm_areas_from_bufs(pcm, areas, bufs);
+	//snd_pcm_areas_from_bufs(pcm, areas, bufs); not in API
 	// read areas
-	// This function handles the pcm states and makes use of the
-	// snd_mmap_begin, snd_pcm_areas_copy and snd_ocm_mmap_commit
-	// functions intended for the use with direct memory access.
-	return snd_pcm_read_areas(pcm, areas, 0, size,snd_pcm_mmap_read_areas);
-	*/
-	return snd_pcm_mmap_readn(pcm, bufs, size);
+	while(1)
+	{
+		state = snd_pcm_state(pcm);
+		if(state == SND_PCM_STATE_PREPARED)
+		{
+			err = snd_pcm_start(pcm);
+			if (err < 0)
+			{
+				fprintf(stderr,"Start error: %s\n", snd_strerror(err));
+				exit(EXIT_FAILURE);
+			}
+		}
+		if(state == SND_PCM_STATE_XRUN)
+		{
+				fprintf(stderr,"Xrun detected: %s\n", snd_strerror(err));
+				exit(EXIT_FAILURE);
+		}
+		if(state == SND_PCM_STATE_XRUN)
+		{
+				fprintf(stderr,"Xrun detected: %s\n", snd_strerror(err));
+				exit(EXIT_FAILURE);
+		}
+		if(state == SND_PCM_STATE_RUNNING)
+		{
+			avail = snd_pcm_avail_update(pcm);
+			if(avail < 0)
+			{
+				fprintf(stderr,"Avail error: %s\n", snd_strerror(err));
+				exit(EXIT_FAILURE);
+			}
+			else if(avail < period_size)
+			{
+				err = snd_pcm_wait(pcm, -1);
+				if (err < 0)
+				{
+					printf("snd_pcm_wait error: %s\n", snd_strerror(err));
+					exit(EXIT_FAILURE);
+				}
+			}
+			else
+			{
+				err = snd_pcm_mmap_begin(pcm, &areas, &offset, &size);
+				err = write(1, areas, size);
+				err = snd_pcm_mmap_commit(pcm, offset, size);
+			}
+		}
+	}
+	/*return snd_pcm_mmap_readn(pcm, bufs, size);*/
 }
 
 /**
